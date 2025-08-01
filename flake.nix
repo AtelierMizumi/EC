@@ -1,5 +1,6 @@
+# Maintainer: Minh Thuan Tran <thuanc177@gmail.com>
 {
-  description = "Nix flake to build and install cs2-ec";
+  description = "Nix flake for open-source External Cheat for CS2 (cs2-ec)";
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
@@ -16,12 +17,11 @@
         system:
         let
           pkgs = import nixpkgs { inherit system; };
-          lib = pkgs.lib;
           vmSrc = pkgs.fetchFromGitHub {
             owner = "ekknod";
             repo = "vm";
-            rev = "master"; # Pin to a commit for reproducibility when known
-            sha256 = lib.fakeSha256; # Replace with the hash Nix prints on first build
+            rev = "fcb3d2d2a3511b9c78bf0a9d13985ee2ac1157a2"; # pinned commit
+            sha256 = "sha256-JXdQRZ1KtsLY24bz50PKFYI5yojKwOwhTjEOGbDLebI=";
           };
         in
         {
@@ -30,8 +30,13 @@
             version = "0.1.0";
             src = ./.;
 
+            strictDeps = true;
+
             nativeBuildInputs = [ pkgs.pkg-config ];
-            buildInputs = [ pkgs.SDL3 ];
+            buildInputs = [
+              pkgs.sdl3
+              pkgs.linuxHeaders
+            ];
 
             dontConfigure = true;
             NIX_CFLAGS_COMPILE = "-O3 -DNDEBUG -Wall -Wno-format-truncation -Wno-strict-aliasing";
@@ -45,19 +50,16 @@
                 cp -r ${vmSrc} library/vm
               fi
 
-              # Provide SDL3 headers on expected path used by the codebase
-              mkdir -p library/SDL3/include
-              ln -sf ${pkgs.SDL3.dev}/include/SDL3 library/SDL3/include/SDL3
-
-              # Resolve SDL3 link flags (ensures rpath is set)
+              # Use pkg-config for flags
+              SDL_CFLAGS="$(pkg-config --cflags sdl3)"
               SDL_LDFLAGS="$(pkg-config --libs sdl3)"
 
-              $CXX -std=c++17 -o cs2-ec \
+              $CXX -std=c++17 $CXXFLAGS $SDL_CFLAGS -o cs2-ec \
                 projects/LINUX/main.cpp \
                 cs2/shared/cs2.cpp cs2/shared/cs2features.cpp \
                 apex/shared/apex.cpp apex/shared/apexfeatures.cpp \
                 library/vm/linux/vm.cpp \
-                -pthread $SDL_LDFLAGS
+                -pthread $SDL_LDFLAGS -ldl
 
               runHook postBuild
             '';
