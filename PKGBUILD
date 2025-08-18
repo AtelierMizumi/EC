@@ -8,7 +8,7 @@ arch=('x86_64')
 url="https://github.com/AtelierMizumi/EC"
 license=('unknown')
 depends=('sdl3')
-makedepends=('git' 'gcc')
+makedepends=('git' 'gcc' 'pkgconf')
 provides=(${_pkgname})
 conflicts=(${_pkgname})
 source=("${_pkgname}::git+https://github.com/AtelierMizumi/EC.git")
@@ -28,17 +28,16 @@ prepare() {
 build() {
   cd "${srcdir}/${_pkgname}"
 
-  # Wire system SDL3 headers to expected in-tree include path
-  mkdir -p library/SDL3/include
-  ln -sfn /usr/include/SDL3 library/SDL3/include/SDL3
+  CFLAGS="$CFLAGS -O3 -DNDEBUG -Wall -Wno-format-truncation -Wno-strict-aliasing"
+  SDL_CFLAGS="$(pkg-config --cflags sdl3)"
+  SDL_LIBS="$(pkg-config --libs sdl3)"
 
-  g++ -std=c++17 -O3 -DNDEBUG -Wall -Wno-format-truncation -Wno-strict-aliasing \
-    -o cs2-ec \
+  g++ -std=c++17 ${CFLAGS} ${SDL_CFLAGS} -o cs2-ec \
     projects/LINUX/main.cpp \
     cs2/shared/cs2.cpp cs2/shared/cs2features.cpp \
     apex/shared/apex.cpp apex/shared/apexfeatures.cpp \
     library/vm/linux/vm.cpp \
-    -pthread -lSDL3 -ldl
+    -pthread ${SDL_LIBS}
 }
 
 package() {
