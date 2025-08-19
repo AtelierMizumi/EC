@@ -1,7 +1,7 @@
 #include "../../cs2/shared/cs2game.h"
 // #include "../../csgo/shared/csgogame.h"
 #include "../../apex/shared/apexgame.h"
-#include "../../library/SDL3/include/SDL3/SDL.h"
+#include <SDL3/SDL.h>
 
 SDL_Renderer *sdl_renderer;
 

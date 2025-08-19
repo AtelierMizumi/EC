@@ -11,7 +11,7 @@
 #include <fcntl.h>
 #include <limits.h>
 
-#include "../../library/SDL3/include/SDL3/SDL.h"
+#include <SDL3/SDL.h>
 
 static SDL_Renderer* renderer;
 
@@ -129,7 +129,7 @@ int main(void)
 	{
 		return 0;
 	}
-	SDL_DisplayID id = SDL_GetDisplayForWindow(temp);
+	/* SDL_DisplayID id = SDL_GetDisplayForWindow(temp); */
 	SDL_SetWindowPosition(temp, 0, 0);
 
 	int total_displays = 0;
@@ -160,12 +160,13 @@ int main(void)
 	SDL_SetWindowSize(window, display_max_x - display_min_x, display_max_y - display_min_y);
 	SDL_SetWindowPosition(window, display_min_x, display_min_y);
 
-	SDL_SetWindowAlwaysOnTop(window, SDL_TRUE);
+	SDL_SetWindowAlwaysOnTop(window, true);
 
-	renderer = SDL_CreateRenderer(window, 0, SDL_RENDERER_PRESENTVSYNC);
+	renderer = SDL_CreateRenderer(window, NULL);
+	SDL_SetRenderVSync(renderer, 1);
 	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
-	BOOL quit = 0;
+	bool quit = false;
 	while (!quit)
 	{
 		SDL_Event e;
@@ -173,7 +174,7 @@ int main(void)
 		{
 			if (e.type == SDL_EVENT_QUIT)
 			{
-				quit = 1;
+				quit = true;
 				break;
 			}
 		}
@@ -217,7 +218,7 @@ int main(void)
 		}
 		else
 		{
-			BOOL is_running = 0;
+			bool is_running = false;
 			if (!is_running) is_running = cs2::running();
 			// if (!is_running) is_running = csgo::running();
 			if (!is_running) is_running = apex::running();

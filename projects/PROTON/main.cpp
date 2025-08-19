@@ -10,7 +10,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 
-#include "../../library/SDL3/include/SDL3/SDL.h"
+#include <SDL3/SDL.h>
 
 static SDL_Renderer* renderer;
 
