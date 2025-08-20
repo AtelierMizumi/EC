@@ -4,6 +4,7 @@
 #include "../../apex/shared/apexgame.h"
 
 #include <SDL3/SDL.h>
+#include <cstdlib>
 #include <devguid.h>
 #include <SetupAPI.h>
 #include <format>
@@ -140,6 +141,18 @@ namespace client
 
 int main(void)
 {
+    // Prefer X11 under Wayland to avoid global positioning failures on Wayland
+    const char* wayland = std::getenv("WAYLAND_DISPLAY");
+    const char* x11 = std::getenv("DISPLAY");
+    if (wayland && x11) {
+        setenv("SDL_VIDEODRIVER", "x11", 1);
+    }
+
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
+
 	kmbox::is_kmbox = kmbox::open() || kmbox::net::open();
 	if (kmbox::is_kmbox)
 	{
@@ -148,11 +161,6 @@ int main(void)
 	else
 	{
 		LOG("kmbox not found, using normal input\n");
-	}
-
-	if (SDL_Init(SDL_INIT_VIDEO) < 0)
-	{
-		return 0;
 	}
 
 	SDL_Window* window = SDL_CreateWindow("EC", 640, 480, SDL_WINDOW_BORDERLESS);

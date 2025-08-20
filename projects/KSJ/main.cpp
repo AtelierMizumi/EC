@@ -2,6 +2,7 @@
 // #include "../../csgo/shared/csgogame.h"
 #include "../../apex/shared/apexgame.h"
 #include <SDL3/SDL.h>
+#include <cstdlib>
 
 SDL_Renderer *sdl_renderer;
 
@@ -62,9 +63,17 @@ namespace client
 
 int main(void)
 {
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		return 0;
-	}
+    // Prefer X11 under Wayland to avoid global positioning failures on Wayland
+    const char* wayland = std::getenv("WAYLAND_DISPLAY");
+    const char* x11 = std::getenv("DISPLAY");
+    if (wayland && x11) {
+        setenv("SDL_VIDEODRIVER", "x11", 1);
+    }
+
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        SDL_Log("SDL_Init failed: %s", SDL_GetError());
+        return 1;
+    }
 
 	SDL_Window *window = SDL_CreateWindow("EC", 640, 480, SDL_WINDOW_FULLSCREEN);
 	if (window == NULL)

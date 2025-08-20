@@ -12,6 +12,7 @@
 #include <limits.h>
 
 #include <SDL3/SDL.h>
+#include <cstdlib>
 
 static SDL_Renderer* renderer;
 
@@ -119,52 +120,115 @@ int main(void)
 		LOG("failed to open mouse\n");
 		return 0;
 	}
+	LOG("EC started successfully\n");
 
-	if (SDL_Init(SDL_INIT_VIDEO) < 0) {
-		return 0;
-	}
-	
-	SDL_Window *temp = SDL_CreateWindow("EC", 1, 1, SDL_WINDOW_MINIMIZED | SDL_WINDOW_OPENGL);
-	if (temp == NULL)
-	{
-		return 0;
-	}
-	/* SDL_DisplayID id = SDL_GetDisplayForWindow(temp); */
-	SDL_SetWindowPosition(temp, 0, 0);
+    // SDL3: SDL_Init returns true on success, false on failure
+    if (!SDL_Init(SDL_INIT_VIDEO)) {
+        LOG("SDL_Init failed: %s\n", SDL_GetError());
+        return 0;
+    }
+    LOG("SDL_Init OK\n");
 
-	int total_displays = 0;
-	SDL_DisplayID* display_ids = SDL_GetDisplays(&total_displays);
+    const char* video_driver = SDL_GetCurrentVideoDriver();
+    LOG("SDL video driver: %s\n", video_driver ? video_driver : "(null)");
+    bool is_wayland = (video_driver && strcmp(video_driver, "wayland") == 0);
+    
+    SDL_Window *temp = SDL_CreateWindow("EC", 1, 1, SDL_WINDOW_MINIMIZED | SDL_WINDOW_OPENGL);
+    if (temp == NULL)
+    {
+        LOG("SDL_CreateWindow (temp) failed: %s\n", SDL_GetError());
+        return 0;
+    }
+    /* SDL_DisplayID id = SDL_GetDisplayForWindow(temp); */
+    if (!is_wayland) {
+        SDL_SetWindowPosition(temp, 0, 0);
+    }
 
-	int display_min_x = INT_MAX;
-	int display_min_y = INT_MAX;
-	int display_max_x = 0;
-	int display_max_y = 0;
-	for (int i = 0; i < total_displays && display_ids[i] != 0; i++)
-	{
-		SDL_Rect rect;
-		if (SDL_GetDisplayBounds(display_ids[i], &rect) == 0) {
-			display_min_x = SDL_min(display_min_x, rect.x);
-			display_min_y = SDL_min(display_min_y, rect.y);
-			display_max_x = SDL_max(display_max_x, rect.x + rect.w);
-			display_max_y = SDL_max(display_max_y, rect.y + rect.h);
-		}
-	}
-	if (display_min_x == INT_MAX) {
-		return 0;
-	}
-	SDL_free(display_ids);
+    // Compute window bounds:
+    // - On Wayland: use the primary display only (no global coords, no spanning).
+    // - Else: prefer primary display; fall back to previous logic if needed.
+    SDL_Rect bounds{};
+    bool have_bounds = false;
 
-	SDL_Window *window = SDL_CreatePopupWindow(temp, 0, 0, 640, 480,
-		SDL_WINDOW_TRANSPARENT | SDL_WINDOW_BORDERLESS | SDL_WINDOW_TOOLTIP);
-		
-	SDL_SetWindowSize(window, display_max_x - display_min_x, display_max_y - display_min_y);
-	SDL_SetWindowPosition(window, display_min_x, display_min_y);
+    SDL_DisplayID primary = SDL_GetPrimaryDisplay();
+    if (primary != 0 && SDL_GetDisplayBounds(primary, &bounds) == 0) {
+        have_bounds = true;
+    } else {
+        // Fallback: try legacy enumeration to get at least some bounds (non-Wayland)
+        if (!is_wayland) {
+            int total_displays = 0;
+            SDL_DisplayID* display_ids = SDL_GetDisplays(&total_displays);
+            if (total_displays > 0 && display_ids != NULL) {
+                int display_min_x = INT_MAX;
+                int display_min_y = INT_MAX;
+                int display_max_x = 0;
+                int display_max_y = 0;
+                for (int i = 0; i < total_displays && display_ids[i] != 0; i++)
+                {
+                    SDL_Rect rect;
+                    if (SDL_GetDisplayBounds(display_ids[i], &rect) == 0) {
+                        display_min_x = SDL_min(display_min_x, rect.x);
+                        display_min_y = SDL_min(display_min_y, rect.y);
+                        display_max_x = SDL_max(display_max_x, rect.x + rect.w);
+                        display_max_y = SDL_max(display_max_y, rect.y + rect.h);
+                    }
+                }
+                if (display_min_x != INT_MAX) {
+                    bounds.x = display_min_x;
+                    bounds.y = display_min_y;
+                    bounds.w = display_max_x - display_min_x;
+                    bounds.h = display_max_y - display_min_y;
+                    have_bounds = true;
+                }
+            }
+            if (display_ids) SDL_free(display_ids);
+        }
+    }
 
-	SDL_SetWindowAlwaysOnTop(window, true);
+    if (!have_bounds) {
+        bounds.x = 0;
+        bounds.y = 0;
+        bounds.w = 640;
+        bounds.h = 480;
+        LOG("Using fallback window size: %dx%d (GetDisplayBounds unavailable)\n", bounds.w, bounds.h);
+    }
 
-	renderer = SDL_CreateRenderer(window, NULL);
-	SDL_SetRenderVSync(renderer, 1);
-	SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+    SDL_Window *window = nullptr;
+    if (is_wayland) {
+        // Wayland: popup windows require a grab and cannot be freely positioned.
+        // Use a normal borderless transparent window sized to the primary display.
+        window = SDL_CreateWindow("EC", bounds.w, bounds.h, SDL_WINDOW_TRANSPARENT | SDL_WINDOW_BORDERLESS);
+        if (window == NULL) {
+            LOG("SDL_CreateWindow failed (wayland): %s\n", SDL_GetError());
+            return 0;
+        }
+    } else {
+        window = SDL_CreatePopupWindow(temp, 0, 0, 640, 480,
+            SDL_WINDOW_TRANSPARENT | SDL_WINDOW_BORDERLESS | SDL_WINDOW_TOOLTIP);
+        if (window == NULL) {
+            LOG("SDL_CreatePopupWindow failed: %s\n", SDL_GetError());
+            // Fallback: create a normal borderless window
+            window = SDL_CreateWindow("EC", 640, 480, SDL_WINDOW_TRANSPARENT | SDL_WINDOW_BORDERLESS);
+            if (window == NULL) {
+                LOG("SDL_CreateWindow fallback failed: %s\n", SDL_GetError());
+                return 0;
+            }
+        }
+    }
+
+    SDL_SetWindowSize(window, bounds.w, bounds.h);
+    if (!is_wayland) {
+        SDL_SetWindowPosition(window, bounds.x, bounds.y);
+        SDL_SetWindowAlwaysOnTop(window, true);
+    }
+
+    renderer = SDL_CreateRenderer(window, NULL);
+    if (renderer == NULL) {
+        LOG("SDL_CreateRenderer failed: %s\n", SDL_GetError());
+        return 0;
+    }
+    SDL_SetRenderVSync(renderer, 1);
+    SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
 
 	bool quit = false;
 	while (!quit)
@@ -180,6 +244,9 @@ int main(void)
 		}
 
 		SDL_RenderClear(renderer);
+
+		// Always draw a small indicator in top-left corner
+		client::DrawFillRect(nullptr, 10, 10, 100, 20, 0, 255, 0); // Green bar
 
 		if (cs2::game_handle)
 		{
@@ -222,6 +289,11 @@ int main(void)
 			if (!is_running) is_running = cs2::running();
 			// if (!is_running) is_running = csgo::running();
 			if (!is_running) is_running = apex::running();
+			
+			// Show status in top-left
+			if (!is_running) {
+				client::DrawFillRect(nullptr, 120, 10, 100, 20, 255, 0, 0); // Red bar = no game
+			}
 		}
 		
 		SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0);
